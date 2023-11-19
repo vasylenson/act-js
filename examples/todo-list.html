@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Counter | Act.js</title>
+</head>
+<script defer type="module">
+    import { element, render, useState } from '../src/act.js'
+
+    const appDiv = document.querySelector('#app')
+    
+    const Todo = () => {
+        const [list, updateList] = useState([])
+        
+        const addItem = itemName => updateList(l => l.push(itemName))
+        const removeItem = itemIndex => updateList(l => l.splice(itemIndex))
+
+        const [inputText, updateText] = useState('new todo')
+
+        const setInputText = e => {
+            e.preventDefault()
+            updateText(_ => e.target.value)
+        }
+        
+        return element(
+            'div', {},
+            element(
+                'div', {},
+                element('input', { type: 'text', value: inputText, oninput: e => setInputText(e) }, ''),
+                element('button', {}, 'add'),
+            ),
+            inputText
+        )
+    }
+
+    const Item = ({ name, onRemove }) => (
+        element(
+            'div', {},
+            element('p', {}, `${name}`),
+            element('button', { onclick: onRemove }, `x`),
+        )
+    )
+
+    render(element(Todo, {}), appDiv)
+</script>
+<body>
+    <div id="app" />
+</body>
+</html>
