@@ -1,6 +1,6 @@
-import { render, element, useState } from './core.js'
+import { render, element, useState, Debug } from './core.js'
 
-export { render, element, useState }
+export { render, element, useState, Debug }
 
 
 /**

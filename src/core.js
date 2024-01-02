@@ -50,7 +50,7 @@ export function element(type, attrs, ...nodes) {
  */
 export function renderToDOM({ type, attrs, nodes: children }, container) {
     if (typeof type === 'function') {
-        renderToDOM(type(attrs), container)
+        renderToDOM(children[0], container)
         return
     }
 
@@ -86,8 +86,11 @@ export function renderToDOM({ type, attrs, nodes: children }, container) {
 /**
  * The virtual DOM root/tree.
  * 
- * @type {Node?}
+ * @type {?Node}
  */
+let rootElement = null
+
+/** @type {?Fiber} */
 let tree = null
 
 /**
@@ -98,11 +101,13 @@ let tree = null
 let docRoot
 
 const rerender = () => {
-    if (!tree) return console.warn('Called re-render on an empty tree');
+    Debug.log('called rerender')
+    if (!rootElement) return console.warn('Called re-render on an empty tree');
 
     hookIndex = 0  // hooks need to be invoked in order, from the first one
     docRoot.innerHTML = ''  // clear out the previous content
-    renderToDOM(tree, docRoot)
+    tree = buildFiberTree(rootElement)
+    renderToDOM(rootElement, docRoot)
     hooks = hooks.slice(0, hookIndex)  // delete all the unused hooks
 }
 
@@ -113,10 +118,75 @@ const rerender = () => {
  * @param {HTMLElement} container DOM element to which the virtual DOM will be rendered
  */
 export function render(element, container) {
-    tree = element
+    Debug.log('called render')
+    rootElement = element
     docRoot = container
     rerender()
 }
+
+// -- Fiber reconciliation --
+
+/**
+ * A fiber, as in React Fiber
+ * 
+ * @typedef {object} Fiber
+ * @property {Node} node
+ * @property {any[]} hooks
+ * @property {Fiber?} parent
+ * @property {Fiber?} sibling
+ * @property {Fiber?} child
+ * @property {HTMLElement?} dom
+ */
+
+/**
+ * Construct a new fiber
+ * 
+ * @param {Node} node 
+ * @returns {Fiber}
+ */
+function fiber(node) {
+    return {
+        node,
+        hooks: [],
+        parent: null,
+        sibling: null,
+        child: null,
+        dom: null,
+    }
+}
+
+/**
+ * Recursively render a VDOM node to DOM.
+ *
+ * @param {Node} root 
+ * @return {Fiber} the resulting tree
+ */
+function buildFiberTree(root) {
+    const rootFiber = fiber(root)
+
+    // the node is a functional component
+    if (typeof root.type === 'function') {
+        rootFiber.child = fiber(root.type(root.attrs))
+        rootFiber.child.parent = rootFiber
+        return rootFiber
+    }
+
+    if (root.nodes.length === 0) return rootFiber
+
+    const childFibers = root.nodes.map(buildFiberTree)
+    rootFiber.child = childFibers[0]
+
+    for (let i = 0; i < childFibers.length - 1; i++) {
+        childFibers[i].sibling = childFibers[i + 1]
+        childFibers[i].parent = rootFiber
+    }
+
+    childFibers[childFibers.length - 1].parent = rootFiber
+
+    return rootFiber
+}
+
+
 
 // --- Hooks ---
 
@@ -198,17 +268,32 @@ export function useEffect(effect, ...dependencies) {
     hook.dependencies = [...dependencies]
 }
 
+function defaultLogger(data) {
+    console.log({ debug: data })
+}
 
-// --- Helper Functions ---
+const INFO = Symbol('INFO')
+const WARN = Symbol('WARN')
+const ERR = Symbol('ERR')
+const logIndex = { [INFO]: 0, [WARN]: 1, [ERR]: 2 }
 
-/**
- * 
- * @param {any[]} as 
- * @param {any[]} bs 
- * @returns {boolean}
- */
-const arraysEqual = (as, bs) =>
-    as.reduce(
-        (equalSoFar, a, index) => equalSoFar && a === bs[index],
-        true
-    )
+export const Debug = {
+    // "sub-classes"
+    LogLevel: { INFO, WARN, ERR },
+
+    // properties
+    logLevel: WARN,
+    logger: defaultLogger,
+
+    get tree() {
+        return rootElement
+    },
+
+    // methods, some overridable
+    log(data, messageLogLevel = INFO) {
+        if (logIndex[messageLogLevel] >= logIndex[this.logLevel]) this.logger(data)
+    },
+    setDefaultLogger() {
+        this.log = defaultLogger
+    }
+}
